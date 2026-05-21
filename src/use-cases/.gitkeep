@@ -1,0 +1,14 @@
+/**
+ * Application Layer - Business Use Cases
+ *
+ * Structure:
+ * - use-cases/checkout/         → process-checkout.ts
+ * - use-cases/media-upload/     → request-presigned-url.ts
+ * - use-cases/products/         → get-product-detail.ts
+ * - use-cases/orders/           → get-user-orders.ts
+ *
+ * Rules (from nextjs-backend.md):
+ * - Each file handles ONE specific business action (SRP)
+ * - NO Next.js imports (framework-agnostic)
+ * - Depends on Repositories via interfaces (DIP)
+ */

@@ -1,0 +1,8 @@
+/**
+ * Domain Layer - Enterprise Business Rules
+ *
+ * Structure:
+ * - domain/schemas/    → Zod validation schemas (user.schema.ts, product.schema.ts)
+ * - domain/types/      → TypeScript interfaces & types
+ * - domain/errors/     → Custom error classes (InsufficientStockError, etc.)
+ */

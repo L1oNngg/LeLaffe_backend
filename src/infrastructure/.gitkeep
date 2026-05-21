@@ -1,0 +1,8 @@
+/**
+ * Infrastructure Layer
+ *
+ * Structure:
+ * - infrastructure/database/    → db.ts (Prisma singleton)
+ * - infrastructure/repositories/ → user-repo.ts, product-repo.ts, etc.
+ * - infrastructure/services/    → aws-s3.ts, stripe.ts
+ */

@@ -1,0 +1,221 @@
+// =============================================================
+// IMPERIAL SKIN — Prisma Schema
+// Database: PostgreSQL
+// Generated from: .docs/02_Database_ERD.md
+// Architecture: Clean Architecture (nextjs-backend.md)
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// ================= ENUMS =================
+
+enum Role {
+  GUEST
+  CUSTOMER
+  ADMIN
+}
+
+enum MediaStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum BlockType {
+  HERO_FULLSCREEN
+  PARALLAX_IMAGE
+  SPLIT_SCREEN_TEXT
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  STRIPE
+  VNPAY
+  MOMO
+}
+
+// ================= MODELS =================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  role          Role     @default(CUSTOMER)
+  created_at    DateTime @default(now())
+
+  orders        Order[]
+  cart          Cart?
+}
+
+// ================= CART (Server-side) =================
+// User (1) -> (1) Cart (1) -> (N) CartItem
+// Chuyển cơ chế giỏ hàng từ Client-side sang Server-side (DB sync)
+
+model Cart {
+  id         String     @id @default(uuid())
+  user_id    String     @unique       // 1:1 — mỗi User chỉ có 1 Cart
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  // Relations
+  user       User       @relation(fields: [user_id], references: [id])
+  items      CartItem[]
+}
+
+model CartItem {
+  id         String   @id @default(uuid())
+  cart_id    String
+  product_id String
+  quantity   Int      @default(1)
+  added_at   DateTime @default(now())
+
+  // Relations
+  cart       Cart     @relation(fields: [cart_id], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [product_id], references: [id])
+
+  // Ràng buộc: Mỗi sản phẩm chỉ xuất hiện 1 lần trong 1 giỏ hàng
+  // Logic upsert sẽ cộng dồn quantity thay vì tạo bản ghi trùng
+  @@unique([cart_id, product_id])
+
+  // ── Performance Index ───────────────────────────────────────
+  // FK lookup: GET /api/cart fetches all items for a cart
+  @@index([cart_id])
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String
+  slug     String    @unique
+
+  products Product[]
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  category_id  String
+  name         String
+  // slug: URL-friendly identifier for GET /api/products/[slug]
+  // Format: lowercase, hyphenated (e.g. "imperial-serum-4k")
+  slug         String   @unique
+  price        Decimal  @db.Decimal(10, 2)
+  stock        Int      @default(0)
+  is_published Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  // Relations
+  category     Category              @relation(fields: [category_id], references: [id])
+  media        Media[]
+  story_blocks Product_Story_Block[]
+  order_items  Order_Item[]
+  cart_items   CartItem[]
+
+  // ── Performance Indexes ──────────────────────────────────────
+  // Composite: Catalog listing filters (is_published + category_id)
+  //   Used by: GET /api/products (WHERE is_published=true AND category_id=...)
+  //   Covers both "all published" and "published in category" queries.
+  @@index([is_published, category_id])
+
+  // Single: Sort by newest in catalog + admin listings
+  //   Used by: orderBy: { created_at: 'desc' }
+  @@index([created_at])
+}
+
+model Media {
+  id            String      @id @default(uuid())
+  product_id    String
+  media_type    MediaType
+  raw_s3_key    String?     // Đường dẫn gốc trên S3 (dùng để backup, Frontend ko lấy cái này)
+  cdn_url       String      // URL phục vụ cho Frontend (HLS .m3u8 hoặc WebP)
+  resolutions   Json?       // Metadata: VD {"variants": ["1080p", "4k"]}
+  thumbnail_url String?     // Ảnh cover của video
+  status        MediaStatus @default(UPLOADING)
+
+  // Relations
+  product       Product               @relation(fields: [product_id], references: [id])
+  story_blocks  Product_Story_Block[]
+
+  // ── Performance Index ───────────────────────────────────────
+  // FK lookup: Product detail page fetches all media for a product
+  //   Used by: include { media } in product queries
+  @@index([product_id])
+}
+
+// LINH HỒN CỦA LUXURY SHOWCASE
+model Product_Story_Block {
+  id           String    @id @default(uuid())
+  product_id   String
+  media_id     String
+  block_type   BlockType
+  text_content Json      // Cấu trúc text đa ngôn ngữ hoặc Title/Description
+  order_index  Int       // Thứ tự xuất hiện khi scroll (1, 2, 3...)
+
+  // Relations
+  product      Product   @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  media        Media     @relation(fields: [media_id], references: [id])
+
+  // Ràng buộc đảm bảo mỗi block chỉ đứng ở 1 vị trí nhất định cho 1 sản phẩm
+  @@unique([product_id, order_index])
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  user_id         String
+  status          OrderStatus   @default(PENDING)
+  payment_method  PaymentMethod @default(STRIPE)
+  total_amount    Decimal       @db.Decimal(10, 2)
+  created_at      DateTime      @default(now())
+
+  // Relations
+  user            User          @relation(fields: [user_id], references: [id])
+  items           Order_Item[]
+
+  // ── Performance Indexes ──────────────────────────────────────
+  // Composite: Customer order history (GET /api/orders/me)
+  //   Used by: WHERE user_id=$userId ORDER BY created_at DESC
+  //   The composite index satisfies both the filter AND the sort.
+  @@index([user_id, created_at(sort: Desc)])
+
+  // Single: Admin order list filtering by status
+  //   Used by: GET /api/admin/orders?status=PROCESSING
+  @@index([status])
+
+  // Single: Admin order list sort by newest
+  //   Used by: orderBy: { created_at: 'desc' } when no user_id filter
+  @@index([created_at])
+}
+
+model Order_Item {
+  id                String  @id @default(uuid())
+  order_id          String
+  product_id        String
+  quantity          Int
+  price_at_purchase Decimal @db.Decimal(10, 2)
+
+  // Relations
+  order             Order   @relation(fields: [order_id], references: [id])
+  product           Product @relation(fields: [product_id], references: [id])
+
+  // ── Performance Index ───────────────────────────────────────
+  // FK lookup: Order detail/webhook fetches all items for an order
+  //   Used by: include { items } in order queries
+  @@index([order_id])
+}

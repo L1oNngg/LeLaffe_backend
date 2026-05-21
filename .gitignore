@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.npm
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# --- Custom Ignore (Imperial Skin) ---
+.env
+.env.*
+.agents/
+.docs/
+.continue/
+skills-lock.json
+
+# Prisma
+# (LƯU Ý: Tuyệt đối không ignore thư mục migrations)
+# prisma/migrations/*.sql
+# *.db
+# *.db-journal
+# /src/generated/prisma
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Debug & Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
